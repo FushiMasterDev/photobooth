@@ -49,24 +49,30 @@ Các khung có sẵn dùng dải 600×1800 hoặc lưới 1200×1800. Chỉ cầ
 
 ## Thêm bộ lọc
 
-Mở `js/filters.js`, sao chép một object trong `FILTERS`, đổi `id` thành giá trị duy nhất và đặt `name` bằng tiếng Việt. `matrix` chứa đúng 20 số, chia thành 4 hàng × 5 cột theo thứ tự hàng:
+Mở `js/filters.js`, sao chép một object trong `FILTERS`, đổi `id` thành giá trị duy nhất và đặt `name` bằng tiếng Việt. `params` chứa các thông số màu và hiệu ứng; có thể bỏ qua thông số dùng giá trị mặc định:
 
 ```js
 {
   id: 'hong-nhe',
   name: 'Hồng nhẹ',
-  matrix: [
-    1, 0, 0, 0, 10,
-    0, 1, 0, 0, 0,
-    0, 0, 1, 0, 5,
-    0, 0, 0, 1, 0,
-  ],
+  params: { exposure: 0.08, temperature: 0.2, tint: 0.15, fade: 0.03 },
 }
 ```
 
-Mỗi hàng tạo một kênh đầu ra, lần lượt là đỏ, xanh lá, xanh dương và alpha (độ đục). Bốn cột đầu là hệ số nhân với các kênh R, G, B, A gốc; cột cuối là lượng cộng trực tiếp theo đơn vị **0–255**, không phải 0–1. Ví dụ hàng đầu tính `R_mới = m0*R + m1*G + m2*B + m3*A + m4`. Giữ hàng alpha là `[0, 0, 0, 1, 0]` để bảo toàn độ đục.
+| Thông số | Mặc định | Tác dụng |
+| --- | --- | --- |
+| `exposure` | `0` | Độ phơi sáng tính theo stop: `1` nhân đôi độ sáng, `-1` giảm một nửa. |
+| `contrast` | `0` | Tương phản quanh mức sáng 0.5, với hệ số `1 + contrast`. Giá trị dương tăng tương phản, âm giảm. |
+| `saturation` | `1` | Độ bão hoà: `0` là đen trắng, lớn hơn `1` làm màu đậm hơn. |
+| `temperature` | `0` | Dương tăng đỏ và giảm xanh dương (ấm), âm cho tông lạnh. |
+| `tint` | `0` | Dương giảm kênh xanh lá, tạo sắc hồng/magenta; âm tăng xanh lá. |
+| `fade` | `0` | Từ `0` đến `1`, nâng vùng đen và làm bạc màu. |
+| `vignette` | `0` | Từ `0` đến `1`, làm tối các góc ảnh và giữ sáng ở giữa. |
+| `grain` | `0` | Từ `0` đến `1`, thêm hạt ngẫu nhiên với cùng lượng nhiễu cho R, G, B của mỗi pixel. |
 
-`applyMatrix(imageData, matrix)` sửa trực tiếp bộ đệm `Uint8ClampedArray`, tự giới hạn giá trị về 0–255, trả lại chính `imageData`, và bỏ qua xử lý pixel nếu ma trận là đồng nhất (bộ lọc Gốc). Dùng cùng ma trận cho xem trước và xuất ảnh, chỉ lọc trên bản dùng để hiển thị hoặc ghép; ảnh chụp gốc phải luôn được giữ chưa lọc. Không dùng thuộc tính lọc màu của Canvas 2D vì Safari iOS không hỗ trợ.
+`applyFilter(imageData, filter)` nhận cả object bộ lọc và dữ liệu ảnh có `data`, `width`, `height`. Hàm xử lý theo thứ tự phơi sáng → tương phản → bạc màu → nhiệt độ và tint → bão hoà → tối góc → hạt. Hàm sửa trực tiếp bộ đệm `Uint8ClampedArray`, giới hạn kết quả về 0–255, giữ nguyên alpha, trả lại chính `imageData`, và bỏ qua xử lý pixel khi mọi thông số là mặc định (`params: {}` cho bộ lọc Gốc).
+
+Ba bảng tra màu được lưu theo object bộ lọc; khi thay đổi thông số trong lúc chạy, tạo object bộ lọc mới thay vì sửa object cũ. Trọng số tối góc được lưu theo kích thước ảnh. Xem trước camera, ảnh ghép và clip đều truyền cùng object bộ lọc qua hàm này; hạt được tạo ngẫu nhiên ở mỗi lần vẽ. Chỉ lọc bản dùng để hiển thị hoặc ghép; ảnh chụp gốc và nguồn clip luôn được giữ chưa lọc. Không dùng thuộc tính lọc màu của Canvas 2D vì Safari iOS không hỗ trợ.
 
 ## Đổi số kiểu chụp và thời gian đếm ngược
 

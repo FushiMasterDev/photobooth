@@ -206,7 +206,7 @@ async function startCamera() {
     const render = () => {
       if (request !== cameraRequest || currentScreen !== 'capture') return;
       try {
-        drawPreview(camera.video, preview, slotAspect(state.frame), state.facing === 'user', state.filter.matrix, raw);
+        drawPreview(camera.video, preview, slotAspect(state.frame), state.facing === 'user', state.filter, raw);
         animationId = requestAnimationFrame(render);
       } catch (error) {
         showCameraError(error);
@@ -298,7 +298,7 @@ async function makeClip() {
       ...state.frame.caption,
       text: state.frame.caption.text.replaceAll('{date}', formatDate(resultDate)),
     } };
-    const blob = await renderBehind(frame, state.selected.map(index => state.clips[index]), state.filter.matrix, mimeType);
+    const blob = await renderBehind(frame, state.selected.map(index => state.clips[index]), state.filter, mimeType);
     if (run !== clipRun || currentScreen !== 'result') return;
     clipBlob = blob;
     const extension = blob.type.startsWith('video/mp4') ? 'mp4' : 'webm';
@@ -336,7 +336,7 @@ async function renderResult() {
   resultPreview.setAttribute('aria-busy', 'true');
   resultStatus.textContent = 'Đang ghép ảnh…';
   try {
-    const canvas = await composeStrip(state.frame, state.selected.map(index => state.photos[index]), state.filter.matrix, resultDate);
+    const canvas = await composeStrip(state.frame, state.selected.map(index => state.photos[index]), state.filter, resultDate);
     if (run !== resultRun || currentScreen !== 'result') return;
     const blob = await canvasToBlob(canvas, EXPORT_TYPE, EXPORT_QUALITY);
     if (run !== resultRun || currentScreen !== 'result') return;

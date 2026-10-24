@@ -39,7 +39,7 @@ export async function recordClip(stream, ms, mimeType) {
   }
 }
 
-export async function renderBehind(frame, clips, matrix, mimeType, scale = 0.5) {
+export async function renderBehind(frame, clips, filter, mimeType, scale = 0.5) {
   const videos = [];
   const urls = [];
   let stream;
@@ -48,7 +48,7 @@ export async function renderBehind(frame, clips, matrix, mimeType, scale = 0.5) 
   let timeout;
   const cleanups = [];
   try {
-    const render = await createStripRenderer(frame, matrix, new Date(), scale);
+    const render = await createStripRenderer(frame, filter, new Date(), scale);
     await Promise.all(clips.map(clip => new Promise((resolve, reject) => {
       const video = document.createElement('video');
       videos.push(video);

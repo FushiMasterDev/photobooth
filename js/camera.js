@@ -1,6 +1,6 @@
 import { PREVIEW_MAX_W } from './config.js';
 import { coverCrop } from './util.js';
-import { applyMatrix } from './filters.js';
+import { applyFilter } from './filters.js';
 
 const videos = new WeakMap();
 
@@ -83,7 +83,7 @@ export function grabFrame(video, aspect, mirror) {
   return canvas;
 }
 
-export function drawPreview(video, canvas, aspect, mirror, matrix, raw) {
+export function drawPreview(video, canvas, aspect, mirror, filter, raw) {
   if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
   const crop = coverCrop(video.videoWidth, video.videoHeight, aspect);
   const width = Math.max(1, Math.min(PREVIEW_MAX_W, Math.round(crop.sw)));
@@ -102,5 +102,5 @@ export function drawPreview(video, canvas, aspect, mirror, matrix, raw) {
     ctx = drawCrop(video, canvas, crop, mirror);
   }
   const pixels = ctx.getImageData(0, 0, width, height);
-  ctx.putImageData(applyMatrix(pixels, matrix), 0, 0);
+  ctx.putImageData(applyFilter(pixels, filter), 0, 0);
 }

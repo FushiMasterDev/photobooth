@@ -1,4 +1,4 @@
-import { applyMatrix } from './filters.js';
+import { applyFilter } from './filters.js';
 import { coverCrop, formatDate } from './util.js';
 
 const images = new Map();
@@ -18,13 +18,13 @@ export function loadImage(src) {
   return images.get(src);
 }
 
-export async function composeStrip(frame, photos, matrix, date) {
-  const render = await createStripRenderer(frame, matrix, date);
+export async function composeStrip(frame, photos, filter, date) {
+  const render = await createStripRenderer(frame, filter, date);
   return render(photos);
 }
 
 // Prepare the decorative layers once; photos and moving clips share this renderer.
-export async function createStripRenderer(frame, matrix, date, scale = 1) {
+export async function createStripRenderer(frame, filter, date, scale = 1) {
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(frame.width * scale));
   canvas.height = Math.max(1, Math.round(frame.height * scale));
@@ -76,7 +76,7 @@ export async function createStripRenderer(frame, matrix, date, scale = 1) {
       slotCtx.drawImage(source, sx, sy, sw, sh, 0, 0, layer.width, layer.height);
       slotCtx.restore();
       const pixels = slotCtx.getImageData(0, 0, layer.width, layer.height);
-      slotCtx.putImageData(applyMatrix(pixels, matrix), 0, 0);
+      slotCtx.putImageData(applyFilter(pixels, filter), 0, 0);
       ctx.drawImage(layer, slot.x * scale, slot.y * scale);
     });
     ctx.drawImage(foreground, 0, 0);
