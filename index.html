@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#fff7f3">
+    <title>Photobooth · Một chút kỷ niệm</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="styles.css">
+    <script type="module" src="js/app.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <section class="screen welcome" data-screen="welcome" aria-labelledby="welcome-title">
+        <p class="brand">photobooth <span aria-hidden="true">✿</span></p>
+        <div class="welcome-art" aria-hidden="true">
+          <div class="paper-strip"><span>♡</span><span>✿</span><span>☺</span><span>☆</span></div>
+          <div class="paper-strip second"><span>✿</span><span>♡</span><span>☆</span><span>☺</span></div>
+        </div>
+        <h1 id="welcome-title" tabindex="-1">Một chút xinh,<br>một chút kỷ niệm.</h1>
+        <p class="intro">Rủ nhau tạo dáng, giữ lại những khoảnh khắc thật đáng yêu.</p>
+        <div class="actions">
+          <button type="button" class="button primary" data-action="start">Bắt đầu <span aria-hidden="true">→</span></button>
+          <p class="footnote">Ảnh của bạn chỉ ở trên thiết bị này.</p>
+        </div>
+      </section>
+
+      <section class="screen" data-screen="frames" aria-labelledby="frames-title" hidden>
+        <header class="screen-header">
+          <button type="button" class="button icon" data-action="home" aria-label="Về màn hình chào">←</button>
+          <p class="eyebrow">Góc kỷ niệm của bạn</p>
+        </header>
+        <h1 id="frames-title" tabindex="-1">Chọn một chiếc khung</h1>
+        <p class="intro">Dải ảnh nhỏ xinh hay một ô trời đầy kỷ niệm?</p>
+        <div id="frame-picker" class="frame-picker" role="group" aria-label="Mẫu khung ảnh"></div>
+        <div class="actions">
+          <p id="frame-choice" class="selection-note" aria-live="polite"></p>
+          <button type="button" class="button primary" data-action="next">Tiếp tục <span aria-hidden="true">→</span></button>
+        </div>
+      </section>
+
+      <section class="screen" data-screen="capture" aria-labelledby="capture-title" hidden>
+        <header class="screen-header">
+          <button type="button" class="button icon" data-action="back" aria-label="Quay lại chọn khung">←</button>
+          <p class="eyebrow">Sẵn sàng tỏa sáng</p>
+          <button type="button" class="button secondary flip" data-action="flip" disabled>Đổi camera</button>
+        </header>
+        <h1 id="capture-title" tabindex="-1">Cười lên nào!</h1>
+        <p class="intro">Canh dáng trong khung, chọn tông màu bạn thích.</p>
+        <div class="preview-wrap" aria-busy="true">
+          <canvas id="preview" width="480" height="338" role="img" aria-label="Xem trước camera theo đúng tỉ lệ ô ảnh"></canvas>
+        </div>
+        <p id="camera-status" class="selection-note" role="status">Đang mở camera…</p>
+        <div id="capture-filters" class="filter-chips" role="group" aria-label="Bộ lọc ảnh"></div>
+        <div class="actions">
+          <button type="button" class="button primary" data-action="shoot" disabled>Bắt đầu chụp</button>
+          <p class="footnote">Camera trước hiển thị như khi bạn soi gương.</p>
+        </div>
+      </section>
+
+      <section class="screen error-screen" data-screen="error" aria-labelledby="error-title" hidden>
+        <p class="brand">photobooth <span aria-hidden="true">✿</span></p>
+        <div class="error-art" aria-hidden="true">♡</div>
+        <h1 id="error-title" tabindex="-1">Chưa mở được camera</h1>
+        <p id="camera-error" class="intro" role="alert"></p>
+        <div class="actions">
+          <button type="button" class="button primary" data-action="retry">Thử lại</button>
+          <button type="button" class="button secondary" data-action="choose-frame">Chọn lại khung</button>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
