@@ -76,8 +76,14 @@
 
       <section class="screen" data-screen="result" aria-labelledby="result-title" hidden>
         <p class="brand">photobooth <span aria-hidden="true">✿</span></p>
-        <h1 id="result-title" tabindex="-1">Đã chọn đủ ảnh</h1>
+        <h1 id="result-title" tabindex="-1">Kỷ niệm của bạn đây!</h1>
+        <p class="intro">Chọn tông màu cuối cùng rồi lưu lại những nụ cười nhé.</p>
+        <div id="result-preview" class="result-preview" aria-busy="true"></div>
+        <div id="result-filters" class="filter-chips" role="group" aria-label="Bộ lọc ảnh hoàn chỉnh"></div>
         <div class="actions">
+          <p id="result-status" class="selection-note" role="status"></p>
+          <button type="button" class="button primary" data-action="share" hidden disabled>Chia sẻ</button>
+          <button type="button" class="button primary" data-action="save" disabled>Lưu ảnh</button>
           <button type="button" class="button secondary" data-action="again">Chụp lại</button>
         </div>
       </section>

@@ -1,8 +1,10 @@
 import { FRAMES, slotAspect } from './frames.js';
 import { FILTERS } from './filters.js';
-import { PREVIEW_MAX_W, SHOTS, PICK, COUNTDOWN_SEC } from './config.js';
-import { cameraErrorMessage, toggleSelection } from './util.js';
+import { PREVIEW_MAX_W, SHOTS, PICK, COUNTDOWN_SEC, EXPORT_TYPE, EXPORT_QUALITY } from './config.js';
+import { cameraErrorMessage, toggleSelection, formatDate } from './util.js';
 import { openCamera, stopCamera, drawPreview, grabFrame } from './camera.js';
+import { composeStrip } from './compose.js';
+import { canvasToBlob, shareOrNull, downloadBlob } from './share.js';
 
 export const state = {
   frame: FRAMES[0],
@@ -11,6 +13,7 @@ export const state = {
   photos: [],
   clips: [],
   selected: [],
+  result: null,
 };
 
 const screens = [...document.querySelectorAll('[data-screen]')];
@@ -25,6 +28,10 @@ const shotCounter = document.querySelector('#shot-counter');
 const flash = document.querySelector('#capture-flash');
 const photoPicker = document.querySelector('#photo-picker');
 const continueButton = document.querySelector('[data-action="continue"]');
+const resultPreview = document.querySelector('#result-preview');
+const resultStatus = document.querySelector('#result-status');
+const saveButton = document.querySelector('[data-action="save"]');
+const shareButton = document.querySelector('[data-action="share"]');
 const countdownSeconds = new URLSearchParams(window.location.search).has('fast') ? 1 : COUNTDOWN_SEC;
 let currentScreen = 'welcome';
 let camera = null;
@@ -34,6 +41,11 @@ let capturing = false;
 let captureRun = 0;
 let captureTimer = null;
 let resolveDelay = null;
+let resultRun = 0;
+let resultDate = null;
+let resultBlob = null;
+let resultFile = null;
+let resultFilename = '';
 
 function resetCaptureControls() {
   countdown.hidden = true;
@@ -168,12 +180,68 @@ export function show(screenName) {
   const target = screens.find(screen => screen.dataset.screen === screenName);
   if (!target) return;
   if (currentScreen === 'capture') releaseCamera();
+  if (currentScreen === 'result') clearResult();
   currentScreen = screenName;
   screens.forEach(screen => { screen.hidden = screen !== target; });
   target.querySelector('h1')?.focus({ preventScroll: true });
   window.scrollTo(0, 0);
   if (screenName === 'capture') startCamera();
   if (screenName === 'select') renderPhotos();
+  if (screenName === 'result') {
+    resultDate = new Date();
+    const day = formatDate(resultDate).split('.').reverse().join('');
+    const time = `${String(resultDate.getHours()).padStart(2, '0')}${String(resultDate.getMinutes()).padStart(2, '0')}`;
+    resultFilename = `photobooth-${day}-${time}.jpg`;
+    renderResult();
+  }
+}
+
+function clearResult() {
+  resultRun += 1;
+  state.result = null;
+  resultBlob = null;
+  resultFile = null;
+  saveButton.disabled = true;
+  shareButton.disabled = true;
+  shareButton.hidden = true;
+  resultPreview.replaceChildren();
+}
+
+async function renderResult() {
+  clearResult();
+  const run = resultRun;
+  resultPreview.setAttribute('aria-busy', 'true');
+  resultStatus.textContent = 'Đang ghép ảnh…';
+  try {
+    const canvas = await composeStrip(state.frame, state.selected.map(index => state.photos[index]), state.filter.matrix, resultDate);
+    if (run !== resultRun || currentScreen !== 'result') return;
+    const blob = await canvasToBlob(canvas, EXPORT_TYPE, EXPORT_QUALITY);
+    if (run !== resultRun || currentScreen !== 'result') return;
+    state.result = canvas;
+    resultBlob = blob;
+    canvas.id = 'result-image';
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', 'Ảnh hoàn chỉnh theo thứ tự bạn đã chọn');
+    resultPreview.replaceChildren(canvas);
+    saveButton.disabled = false;
+    // Prepare the file now: sharing must start directly from a user gesture on iOS.
+    if (typeof File !== 'undefined') {
+      resultFile = new File([blob], resultFilename, { type: blob.type });
+      try {
+        shareButton.hidden = !navigator.share || !navigator.canShare?.({ files: [resultFile] });
+      } catch {
+        shareButton.hidden = true;
+      }
+    }
+    shareButton.disabled = false;
+    resultStatus.textContent = 'Ảnh đã sẵn sàng để lưu hoặc chia sẻ.';
+  } catch {
+    if (run === resultRun && currentScreen === 'result') {
+      resultStatus.textContent = 'Chưa ghép được ảnh. Hãy chọn lại bộ lọc để thử lại.';
+    }
+  } finally {
+    if (run === resultRun) resultPreview.setAttribute('aria-busy', 'false');
+  }
 }
 
 function updateSelection() {
@@ -259,8 +327,7 @@ function renderFrames() {
   document.querySelector('#frame-choice').textContent = `Đã chọn: ${state.frame.name}`;
 }
 
-function renderFilters() {
-  const chips = document.querySelector('#capture-filters');
+function renderFilters(chips) {
   for (const filter of FILTERS) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -271,9 +338,10 @@ function renderFilters() {
     button.setAttribute('aria-pressed', String(filter === state.filter));
     button.addEventListener('click', () => {
       state.filter = filter;
-      chips.querySelectorAll('[data-filter]').forEach(chip => {
+      document.querySelectorAll('[data-filter]').forEach(chip => {
         chip.setAttribute('aria-pressed', String(chip.dataset.filter === filter.id));
       });
+      if (currentScreen === 'result') renderResult();
     });
     chips.append(button);
   }
@@ -292,6 +360,35 @@ flipButton.addEventListener('click', () => {
 });
 shootButton.addEventListener('click', captureSequence);
 stopButton.addEventListener('click', cancelCapture);
+saveButton.addEventListener('click', () => {
+  if (!resultBlob) return;
+  try {
+    downloadBlob(resultBlob, resultFilename);
+    resultStatus.textContent = 'Đã bắt đầu tải ảnh về thiết bị.';
+  } catch {
+    resultStatus.textContent = 'Chưa lưu được ảnh. Vui lòng thử lại.';
+  }
+});
+shareButton.addEventListener('click', async () => {
+  if (!resultFile) return;
+  const file = resultFile;
+  shareButton.disabled = true;
+  try {
+    const outcome = await shareOrNull(file);
+    if (resultFile !== file || currentScreen !== 'result') return;
+    if (outcome === 'shared') resultStatus.textContent = 'Đã chia sẻ ảnh.';
+    if (outcome === null) {
+      shareButton.hidden = true;
+      resultStatus.textContent = 'Thiết bị chưa hỗ trợ chia sẻ ảnh. Bạn có thể lưu ảnh về máy.';
+    }
+  } catch {
+    if (resultFile === file && currentScreen === 'result') {
+      resultStatus.textContent = 'Chưa chia sẻ được ảnh. Vui lòng thử lại hoặc lưu ảnh về máy.';
+    }
+  } finally {
+    if (resultFile === file) shareButton.disabled = false;
+  }
+});
 continueButton.addEventListener('click', () => {
   if (state.selected.length === PICK) show('result');
 });
@@ -311,5 +408,6 @@ window.addEventListener('pageshow', event => {
 });
 
 renderFrames();
-renderFilters();
+renderFilters(document.querySelector('#capture-filters'));
+renderFilters(document.querySelector('#result-filters'));
 resetCaptureControls();
