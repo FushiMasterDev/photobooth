@@ -104,9 +104,31 @@ p { margin: 0; }
 .frame-art canvas { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; box-shadow: 0 3px 8px #492e381c; }
 .preview-wrap { position: relative; overflow: hidden; border-radius: 24px; background: #eadcdf; box-shadow: 0 5px 20px #492e3810; }
 #preview { display: block; width: 100%; height: auto; }
-.countdown, .capture-flash { position: absolute; inset: 0; pointer-events: none; }
-.countdown { display: grid; place-items: center; color: #fff; font-size: clamp(5rem, 24vw, 8rem); font-weight: 800; text-shadow: 0 3px 20px #492e3899; }
-.capture-flash { background: #fff; }
+.capture-flash { position: absolute; inset: 0; pointer-events: none; background: #fff; }
+.capture-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  align-items: center;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: #fff7f3;
+}
+.shutter {
+  flex: 0 0 auto;
+  width: 88px;
+  height: 88px;
+  padding: 0;
+  border: 5px solid #fff;
+  border-radius: 50%;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  color: #fff;
+  background: var(--accent);
+  box-shadow: 0 5px 14px #492e3833;
+  font-weight: 800;
+}
+.shutter:focus-visible { outline: 3px solid #7448a0; outline-offset: 5px; }
+.shutter:active:not(:disabled) { background: #852b47; box-shadow: inset 0 3px 8px #492e3855; }
 .shot-counter { text-align: center; color: var(--accent); font-weight: 800; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
 .photo-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .photo-option { position: relative; min-width: 0; min-height: 44px; overflow: hidden; padding: 3px; border: 3px solid #eadadd; border-radius: 18px; background: #fff; }

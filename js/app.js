@@ -1,11 +1,11 @@
 import { FRAMES, slotAspect } from './frames.js';
 import { FILTERS } from './filters.js';
-import { PREVIEW_MAX_W, SHOTS, PICK, COUNTDOWN_SEC, CLIP_MS, EXPORT_TYPE, EXPORT_QUALITY } from './config.js';
+import { PREVIEW_MAX_W, SHOTS, PICK, CLIP_MS, CLIP_FPS, EXPORT_TYPE, EXPORT_QUALITY } from './config.js';
 import { cameraErrorMessage, toggleSelection, formatDate } from './util.js';
 import { openCamera, stopCamera, drawPreview, grabFrame } from './camera.js';
 import { composeStrip } from './compose.js';
 import { canvasToBlob, shareOrNull, downloadBlob } from './share.js';
-import { pickMimeType, recordClip, renderBehind } from './behind.js';
+import { pickMimeType, renderBehind } from './behind.js';
 
 const params = new URLSearchParams(window.location.search);
 if (params.has('noclip')) window.MediaRecorder = undefined;
@@ -28,7 +28,6 @@ const status = document.querySelector('#camera-status');
 const flipButton = document.querySelector('[data-action="flip"]');
 const shootButton = document.querySelector('[data-action="shoot"]');
 const stopButton = document.querySelector('[data-action="stop"]');
-const countdown = document.querySelector('#countdown');
 const shotCounter = document.querySelector('#shot-counter');
 const flash = document.querySelector('#capture-flash');
 const photoPicker = document.querySelector('#photo-picker');
@@ -43,130 +42,93 @@ const shareClipButton = document.querySelector('[data-action="share-clip"]');
 const behindVideo = document.querySelector('#behind-video');
 const clipStatus = document.querySelector('#clip-status');
 const clipSpinner = document.querySelector('#clip-spinner');
-const countdownSeconds = params.has('fast') ? 1 : COUNTDOWN_SEC;
 let currentScreen = 'welcome';
 let camera = null;
 let animationId = null;
 let cameraRequest = 0;
-let capturing = false;
-let captureRun = 0;
-let captureTimer = null;
-let resolveDelay = null;
+let flashTimer = null;
+let ring = [];
+let lastClipFrame = -Infinity;
+let clipsEnabled = false;
 let resultRun = 0;
 let resultDate = null;
 let resultBlob = null;
 let resultFile = null;
 let resultFilename = '';
-let clipTimer = null;
-let clipStream = null;
 let clipRun = 0;
 let clipUrl = null;
 let clipBlob = null;
 let clipFile = null;
 let clipFilename = '';
 
-function resetCaptureControls() {
-  countdown.hidden = true;
-  countdown.textContent = '';
+function updateCaptureControls() {
+  shotCounter.textContent = `${state.photos.length}/${SHOTS}`;
+  stopButton.hidden = state.photos.length === 0;
+  shootButton.disabled = !camera || state.photos.length >= SHOTS;
+  flipButton.disabled = !camera || state.photos.length > 0;
+}
+
+function clearFlash() {
+  clearTimeout(flashTimer);
+  flashTimer = null;
   flash.hidden = true;
-  shotCounter.textContent = `0/${SHOTS}`;
-  stopButton.hidden = true;
-  shootButton.hidden = false;
-  shootButton.disabled = !camera;
-  flipButton.disabled = !camera;
 }
 
-function cancelCapture() {
-  captureRun += 1;
-  clearTimeout(clipTimer);
-  clipTimer = null;
-  clearTimeout(captureTimer);
-  captureTimer = null;
-  if (resolveDelay) resolveDelay(false);
-  resolveDelay = null;
-  if (capturing) {
-    state.photos = [];
-    state.clips = [];
-    state.selected = [];
-  }
-  capturing = false;
-  resetCaptureControls();
-}
-
-function captureDelay(ms) {
-  return new Promise(resolve => {
-    resolveDelay = resolve;
-    captureTimer = setTimeout(() => {
-      captureTimer = null;
-      resolveDelay = null;
-      resolve(true);
-    }, ms);
-  });
-}
-
-async function captureSequence() {
-  if (capturing || !camera || currentScreen !== 'capture') return;
-  cancelCapture();
-  const run = captureRun;
-  capturing = true;
+function resetCapture() {
   state.photos = [];
   state.clips = [];
   state.selected = [];
-  shootButton.hidden = true;
-  shootButton.disabled = true;
-  stopButton.hidden = false;
-  flipButton.disabled = true;
+  ring = [];
+  clearFlash();
+  updateCaptureControls();
+}
 
+function shoot() {
+  if (!camera || currentScreen !== 'capture' || state.photos.length >= SHOTS) return;
   try {
-    const mimeType = pickMimeType();
-    let clipsEnabled = mimeType !== null && clipStream !== null;
-    for (let i = 0; i < SHOTS; i += 1) {
-      let clipPromise = null;
-      if (clipsEnabled) {
-        const startClip = () => {
-          clipTimer = null;
-          clipPromise = (async () => {
-            try {
-              return await recordClip(clipStream, Math.min(CLIP_MS, countdownSeconds * 1000), mimeType);
-            } catch {
-              if (run === captureRun) {
-                clipsEnabled = false;
-                state.clips = [];
-              }
-              return null;
-            }
-          })();
-        };
-        const delay = Math.max(0, countdownSeconds * 1000 - CLIP_MS);
-        if (delay) clipTimer = setTimeout(startClip, delay);
-        else startClip();
-      }
-      shotCounter.textContent = `${i + 1}/${SHOTS}`;
-      countdown.hidden = false;
-      for (let seconds = countdownSeconds; seconds > 0; seconds -= 1) {
-        countdown.textContent = String(seconds);
-        if (!await captureDelay(1000) || run !== captureRun) return;
-      }
-      countdown.hidden = true;
-      flash.hidden = false;
-      state.photos.push(grabFrame(camera.video, slotAspect(state.frame), state.facing === 'user'));
-      if (!await captureDelay(150) || run !== captureRun) return;
-      flash.hidden = true;
-      const clip = await clipPromise;
-      if (run !== captureRun) return;
-      if (clipsEnabled && clip) state.clips.push(clip);
+    state.photos.push(grabFrame(camera.video, slotAspect(state.frame), state.facing === 'user'));
+    // A quick double tap leaves the ring empty; keep at least the current frame.
+    if (!ring.length) bufferClipFrame(Infinity);
+    if (clipsEnabled) {
+      // Transfer ownership: later preview frames must not change this shot's clip.
+      state.clips.push(ring);
+      ring = [];
     }
-    capturing = false;
-    show('select');
+    clearFlash();
+    flash.hidden = false;
+    flashTimer = setTimeout(() => {
+      clearFlash();
+      if (state.photos.length === SHOTS && currentScreen === 'capture') show('select');
+    }, 150);
+    updateCaptureControls();
   } catch (error) {
-    if (run === captureRun) showCameraError(error);
+    showCameraError(error);
+  }
+}
+
+function bufferClipFrame(now) {
+  if (!clipsEnabled || now - lastClipFrame < 1000 / CLIP_FPS || camera.video.readyState < 2) return;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(state.frame.slots[0].w * 0.5);
+    canvas.height = Math.max(1, Math.round(canvas.width / slotAspect(state.frame)));
+    canvas.getContext('2d').drawImage(raw, 0, 0, canvas.width, canvas.height);
+    ring.push(canvas);
+    if (ring.length > CLIP_MS / 1000 * CLIP_FPS) ring.shift();
+    lastClipFrame = now;
+  } catch {
+    // Buffering is optional; a failure must not interrupt photo capture.
+    clipsEnabled = false;
+    ring = [];
+    state.clips = [];
   }
 }
 
 function releaseCamera() {
-  cancelCapture();
-  clipStream?.getTracks().forEach(track => track.stop());
-  clipStream = null;
+  clearFlash();
+  ring = [];
+  lastClipFrame = -Infinity;
+  clipsEnabled = false;
   cameraRequest += 1;
   cancelAnimationFrame(animationId);
   animationId = null;
@@ -200,27 +162,20 @@ async function startCamera() {
     camera = opened;
     previewWrap.setAttribute('aria-busy', 'false');
     status.textContent = state.facing === 'user' ? 'Camera trước · Lật như gương' : 'Camera sau';
-    flipButton.disabled = false;
-    shootButton.disabled = false;
+    clipsEnabled = pickMimeType() !== null;
+    updateCaptureControls();
 
-    const render = () => {
+    const render = now => {
       if (request !== cameraRequest || currentScreen !== 'capture') return;
       try {
         drawPreview(camera.video, preview, slotAspect(state.frame), state.facing === 'user', state.filter, raw);
+        bufferClipFrame(now);
         animationId = requestAnimationFrame(render);
       } catch (error) {
         showCameraError(error);
       }
     };
-    render();
-    if (request === cameraRequest && camera && pickMimeType()) {
-      try {
-        clipStream = raw.captureStream(30);
-      } catch {
-        // Recording is optional; photos still work without canvas capture support.
-        clipStream = null;
-      }
-    }
+    render(performance.now());
   } catch (error) {
     if (request === cameraRequest && currentScreen === 'capture') showCameraError(error);
   }
@@ -234,7 +189,10 @@ function showCameraError(error) {
 export function show(screenName) {
   const target = screens.find(screen => screen.dataset.screen === screenName);
   if (!target) return;
-  if (currentScreen === 'capture') releaseCamera();
+  if (currentScreen === 'capture') {
+    releaseCamera();
+    if (screenName !== 'select') resetCapture();
+  }
   if (currentScreen === 'result') clearResult();
   currentScreen = screenName;
   screens.forEach(screen => { screen.hidden = screen !== target; });
@@ -273,7 +231,7 @@ function clearClip() {
   behindVideo.hidden = true;
   if (clipUrl) URL.revokeObjectURL(clipUrl);
   clipUrl = null;
-  makeClipButton.hidden = state.clips.length !== SHOTS;
+  makeClipButton.hidden = !hasClips();
   makeClipButton.disabled = false;
   saveClipButton.hidden = true;
   shareClipButton.hidden = true;
@@ -282,8 +240,12 @@ function clearClip() {
   makeClipButton.setAttribute('aria-busy', 'false');
 }
 
+function hasClips() {
+  return state.clips.length === SHOTS && state.clips.every(clip => clip.length > 0);
+}
+
 async function makeClip() {
-  if (state.clips.length !== SHOTS || makeClipButton.disabled || currentScreen !== 'result') return;
+  if (!hasClips() || makeClipButton.disabled || currentScreen !== 'result') return;
   clearClip();
   const run = clipRun;
   makeClipButton.disabled = true;
@@ -477,12 +439,12 @@ document.querySelector('[data-action="back"]').addEventListener('click', () => s
 document.querySelector('[data-action="retry"]').addEventListener('click', () => show('capture'));
 document.querySelector('[data-action="choose-frame"]').addEventListener('click', () => show('frames'));
 flipButton.addEventListener('click', () => {
-  if (capturing) return;
+  if (!camera || state.photos.length > 0) return;
   state.facing = state.facing === 'user' ? 'environment' : 'user';
   startCamera();
 });
-shootButton.addEventListener('click', captureSequence);
-stopButton.addEventListener('click', cancelCapture);
+shootButton.addEventListener('click', shoot);
+stopButton.addEventListener('click', resetCapture);
 makeClipButton.addEventListener('click', makeClip);
 saveClipButton.addEventListener('click', () => {
   if (!clipBlob) return;
@@ -566,4 +528,4 @@ window.addEventListener('pageshow', event => {
 renderFrames();
 renderFilters(document.querySelector('#capture-filters'));
 renderFilters(document.querySelector('#result-filters'));
-resetCaptureControls();
+updateCaptureControls();

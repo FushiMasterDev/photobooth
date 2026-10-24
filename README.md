@@ -12,7 +12,11 @@ python3 -m http.server 8000
 
 Mở <http://localhost:8000>. Camera chỉ hoạt động qua `localhost` hoặc HTTPS. Khi thử trên điện thoại, dùng liên kết HTTPS; địa chỉ HTTP qua IP mạng nội bộ của máy tính không đủ để cấp quyền camera.
 
-Tham số kiểm thử: `?fast` rút đếm ngược còn 1 giây; `?noclip` tắt `MediaRecorder` để thử luồng chỉ chụp ảnh (có thể kết hợp `?fast&noclip`).
+Mỗi lần bấm nút tròn **Chụp** sẽ chụp ngay một kiểu; đủ 8 kiểu thì chọn 4 ảnh yêu thích. **Chụp lại từ đầu** xoá các kiểu đã chụp; chỉ đổi được camera khi chưa có ảnh.
+
+Tham số kiểm thử: `?noclip` tắt `MediaRecorder` để thử luồng chỉ chụp ảnh.
+
+Khi thiết bị hỗ trợ clip, trang giữ các khung hình nhỏ chưa lọc của khoảng 2 giây gần nhất. Bấm chụp sẽ giữ bộ khung hình đó cho kiểu ảnh và bắt đầu bộ đệm mới. **Tạo clip** chỉ hiện khi cả 8 kiểu đều có khung hình; clip phát lại 4 kiểu đã chọn trong khung với bộ lọc hiện tại. Không ghi video trong lúc chụp.
 
 Chạy kiểm thử với Node.js 22:
 
@@ -74,6 +78,6 @@ Mở `js/filters.js`, sao chép một object trong `FILTERS`, đổi `id` thành
 
 Ba bảng tra màu được lưu theo object bộ lọc; khi thay đổi thông số trong lúc chạy, tạo object bộ lọc mới thay vì sửa object cũ. Trọng số tối góc được lưu theo kích thước ảnh. Xem trước camera, ảnh ghép và clip đều truyền cùng object bộ lọc qua hàm này; hạt được tạo ngẫu nhiên ở mỗi lần vẽ. Chỉ lọc bản dùng để hiển thị hoặc ghép; ảnh chụp gốc và nguồn clip luôn được giữ chưa lọc. Không dùng thuộc tính lọc màu của Canvas 2D vì Safari iOS không hỗ trợ.
 
-## Đổi số kiểu chụp và thời gian đếm ngược
+## Đổi số kiểu chụp và thiết lập clip
 
-Sửa `js/config.js`: `SHOTS` là số kiểu chụp (mặc định 8), `COUNTDOWN_SEC` là số giây đếm ngược mỗi kiểu (mặc định 5). Các thiết lập chung khác cũng nằm tại đây: `PICK` (4 ảnh chọn), `CLIP_MS` (2000 ms), `EXPORT_TYPE` (`image/jpeg`), `EXPORT_QUALITY` (0.92) và `PREVIEW_MAX_W` (480 px).
+Sửa `js/config.js`: `SHOTS` là số kiểu chụp (mặc định 8), `PICK` là số ảnh chọn (4). `CLIP_MS` (2000 ms) là độ dài tối đa của bộ đệm trước mỗi lần chụp; `CLIP_FPS` (10 hình/giây) là tốc độ lấy và phát lại khung hình clip. Các thiết lập chung khác cũng nằm tại đây: `EXPORT_TYPE` (`image/jpeg`), `EXPORT_QUALITY` (0.92) và `PREVIEW_MAX_W` (480 px).
