@@ -264,8 +264,8 @@ Algorithm (values in 0..1 unless noted):
 
 Filters (exact):
 - `original` "Gốc": `{}`
-- `clear` "Trong trẻo": `{exposure: .15, contrast: -.08, saturation: .92, temperature: .02, tint: -.04, fade: .04}`
-- `peach` "Hồng đào": `{exposure: .08, contrast: .05, saturation: 1.05, temperature: .25, tint: -.15, fade: .03}`
+- `clear` "Trong trẻo": `{exposure: .15, contrast: -.08, saturation: .92, temperature: .02, tint: .04, fade: .04}`
+- `peach` "Hồng đào": `{exposure: .08, contrast: .05, saturation: 1.05, temperature: .25, tint: .15, fade: .03}`
 - `film` "Film ấm": `{exposure: .02, contrast: .12, saturation: .85, temperature: .35, fade: .1, vignette: .35, grain: .06}`
 - `cool` "Mát lạnh": `{exposure: .05, contrast: .08, saturation: .9, temperature: -.35, tint: .05}`
 - `bw` "Đen trắng": `{saturation: 0, contrast: .25, fade: .03, vignette: .25, grain: .05}`
