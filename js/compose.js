@@ -19,40 +19,67 @@ export function loadImage(src) {
 }
 
 export async function composeStrip(frame, photos, matrix, date) {
+  const render = await createStripRenderer(frame, matrix, date);
+  return render(photos);
+}
+
+// Prepare the decorative layers once; photos and moving clips share this renderer.
+export async function createStripRenderer(frame, matrix, date, scale = 1) {
   const canvas = document.createElement('canvas');
-  canvas.width = frame.width;
-  canvas.height = frame.height;
+  canvas.width = Math.max(1, Math.round(frame.width * scale));
+  canvas.height = Math.max(1, Math.round(frame.height * scale));
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = frame.background;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const background = document.createElement('canvas');
+  background.width = canvas.width;
+  background.height = canvas.height;
+  const bg = background.getContext('2d');
+  bg.fillStyle = frame.background;
+  bg.fillRect(0, 0, canvas.width, canvas.height);
   if (frame.backgroundImage) {
-    ctx.drawImage(await loadImage(frame.backgroundImage), 0, 0, canvas.width, canvas.height);
+    bg.drawImage(await loadImage(frame.backgroundImage), 0, 0, canvas.width, canvas.height);
   }
-
-  // Filter a separate slot canvas so the frame and raw photos keep their colors.
-  const slotCanvas = document.createElement('canvas');
-  for (let i = 0; i < frame.slots.length; i += 1) {
-    const slot = frame.slots[i];
-    const photo = photos[i];
-    const { sx, sy, sw, sh } = coverCrop(photo.width, photo.height, slot.w / slot.h);
-    slotCanvas.width = slot.w;
-    slotCanvas.height = slot.h;
-    const slotCtx = slotCanvas.getContext('2d');
-    slotCtx.drawImage(photo, sx, sy, sw, sh, 0, 0, slot.w, slot.h);
-    const pixels = slotCtx.getImageData(0, 0, slot.w, slot.h);
-    slotCtx.putImageData(applyMatrix(pixels, matrix), 0, 0);
-    ctx.drawImage(slotCanvas, slot.x, slot.y);
-  }
-
+  const foreground = document.createElement('canvas');
+  foreground.width = canvas.width;
+  foreground.height = canvas.height;
+  const fg = foreground.getContext('2d');
   if (frame.overlayImage) {
-    ctx.drawImage(await loadImage(frame.overlayImage), 0, 0, canvas.width, canvas.height);
+    fg.drawImage(await loadImage(frame.overlayImage), 0, 0, canvas.width, canvas.height);
   }
   if (frame.caption) {
     const caption = frame.caption;
-    ctx.font = caption.font;
-    ctx.fillStyle = caption.color;
-    ctx.textAlign = caption.align;
-    ctx.fillText(caption.text.replaceAll('{date}', formatDate(date)), caption.x, caption.y);
+    fg.scale(scale, scale);
+    fg.font = caption.font;
+    fg.fillStyle = caption.color;
+    fg.textAlign = caption.align;
+    fg.fillText(caption.text.replaceAll('{date}', formatDate(date)), caption.x, caption.y);
   }
-  return canvas;
+  const slots = frame.slots.map(slot => {
+    const layer = document.createElement('canvas');
+    layer.width = Math.max(1, Math.round(slot.w * scale));
+    layer.height = Math.max(1, Math.round(slot.h * scale));
+    return layer;
+  });
+
+  return (sources, mirrors = []) => {
+    ctx.drawImage(background, 0, 0);
+    frame.slots.forEach((slot, i) => {
+      const source = sources[i];
+      const { sx, sy, sw, sh } = coverCrop(source.videoWidth || source.width, source.videoHeight || source.height, slot.w / slot.h);
+      const layer = slots[i];
+      const slotCtx = layer.getContext('2d', { willReadFrequently: true });
+      slotCtx.save();
+      slotCtx.clearRect(0, 0, layer.width, layer.height);
+      if (mirrors[i]) {
+        slotCtx.translate(layer.width, 0);
+        slotCtx.scale(-1, 1);
+      }
+      slotCtx.drawImage(source, sx, sy, sw, sh, 0, 0, layer.width, layer.height);
+      slotCtx.restore();
+      const pixels = slotCtx.getImageData(0, 0, layer.width, layer.height);
+      slotCtx.putImageData(applyMatrix(pixels, matrix), 0, 0);
+      ctx.drawImage(layer, slot.x * scale, slot.y * scale);
+    });
+    ctx.drawImage(foreground, 0, 0);
+    return canvas;
+  };
 }

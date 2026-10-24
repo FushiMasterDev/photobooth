@@ -2,8 +2,6 @@
 
 Photobooth kiểu Life4Cuts dành cho điện thoại, dùng HTML/CSS/JavaScript thuần và ES modules. Không cần bước build hay cài gói npm. Ảnh được xử lý ngay trên thiết bị, không tải lên máy chủ.
 
-Hiện đã có các hàm tiện ích, dữ liệu khung và bộ lọc; giao diện chụp ảnh sẽ được bổ sung ở các bước tiếp theo. Hướng dẫn mở trang và triển khai bên dưới áp dụng khi có `index.html`.
-
 ## Chạy trên máy
 
 Tại thư mục dự án, chạy:
@@ -13,6 +11,8 @@ python3 -m http.server 8000
 ```
 
 Mở <http://localhost:8000>. Camera chỉ hoạt động qua `localhost` hoặc HTTPS. Khi thử trên điện thoại, dùng liên kết HTTPS; địa chỉ HTTP qua IP mạng nội bộ của máy tính không đủ để cấp quyền camera.
+
+Tham số kiểm thử: `?fast` rút đếm ngược còn 1 giây; `?noclip` tắt `MediaRecorder` để thử luồng chỉ chụp ảnh (có thể kết hợp `?fast&noclip`).
 
 Chạy kiểm thử với Node.js 22:
 

@@ -83,14 +83,24 @@ export function grabFrame(video, aspect, mirror) {
   return canvas;
 }
 
-export function drawPreview(video, canvas, aspect, mirror, matrix) {
+export function drawPreview(video, canvas, aspect, mirror, matrix, raw) {
   if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
   const crop = coverCrop(video.videoWidth, video.videoHeight, aspect);
   const width = Math.max(1, Math.min(PREVIEW_MAX_W, Math.round(crop.sw)));
   const height = Math.max(1, Math.round(width / aspect));
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
-  const ctx = drawCrop(video, canvas, crop, mirror);
+  let ctx;
+  if (raw) {
+    if (raw.width !== width) raw.width = width;
+    if (raw.height !== height) raw.height = height;
+    drawCrop(video, raw, crop, mirror);
+    ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(raw, 0, 0);
+  } else {
+    ctx = drawCrop(video, canvas, crop, mirror);
+  }
   const pixels = ctx.getImageData(0, 0, width, height);
   ctx.putImageData(applyMatrix(pixels, matrix), 0, 0);
 }

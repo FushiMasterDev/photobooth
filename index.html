@@ -84,6 +84,13 @@
           <p id="result-status" class="selection-note" role="status"></p>
           <button type="button" class="button primary" data-action="share" hidden disabled>Chia sẻ</button>
           <button type="button" class="button primary" data-action="save" disabled>Lưu ảnh</button>
+          <button type="button" class="button secondary" data-action="make-clip" hidden>
+            <span id="clip-spinner" class="clip-spinner" aria-hidden="true" hidden></span>Tạo clip
+          </button>
+          <p id="clip-status" class="selection-note" role="status"></p>
+          <video id="behind-video" controls playsinline muted autoplay aria-label="Clip những khoảnh khắc lúc chụp" hidden></video>
+          <button type="button" class="button secondary" data-action="save-clip" hidden>Lưu clip</button>
+          <button type="button" class="button secondary" data-action="share-clip" hidden>Chia sẻ clip</button>
           <button type="button" class="button secondary" data-action="again">Chụp lại</button>
         </div>
       </section>

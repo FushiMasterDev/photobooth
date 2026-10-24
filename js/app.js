@@ -1,10 +1,14 @@
 import { FRAMES, slotAspect } from './frames.js';
 import { FILTERS } from './filters.js';
-import { PREVIEW_MAX_W, SHOTS, PICK, COUNTDOWN_SEC, EXPORT_TYPE, EXPORT_QUALITY } from './config.js';
+import { PREVIEW_MAX_W, SHOTS, PICK, COUNTDOWN_SEC, CLIP_MS, EXPORT_TYPE, EXPORT_QUALITY } from './config.js';
 import { cameraErrorMessage, toggleSelection, formatDate } from './util.js';
 import { openCamera, stopCamera, drawPreview, grabFrame } from './camera.js';
 import { composeStrip } from './compose.js';
 import { canvasToBlob, shareOrNull, downloadBlob } from './share.js';
+import { pickMimeType, recordClip, renderBehind } from './behind.js';
+
+const params = new URLSearchParams(window.location.search);
+if (params.has('noclip')) window.MediaRecorder = undefined;
 
 export const state = {
   frame: FRAMES[0],
@@ -18,6 +22,7 @@ export const state = {
 
 const screens = [...document.querySelectorAll('[data-screen]')];
 const preview = document.querySelector('#preview');
+const raw = document.createElement('canvas');
 const previewWrap = document.querySelector('.preview-wrap');
 const status = document.querySelector('#camera-status');
 const flipButton = document.querySelector('[data-action="flip"]');
@@ -32,7 +37,13 @@ const resultPreview = document.querySelector('#result-preview');
 const resultStatus = document.querySelector('#result-status');
 const saveButton = document.querySelector('[data-action="save"]');
 const shareButton = document.querySelector('[data-action="share"]');
-const countdownSeconds = new URLSearchParams(window.location.search).has('fast') ? 1 : COUNTDOWN_SEC;
+const makeClipButton = document.querySelector('[data-action="make-clip"]');
+const saveClipButton = document.querySelector('[data-action="save-clip"]');
+const shareClipButton = document.querySelector('[data-action="share-clip"]');
+const behindVideo = document.querySelector('#behind-video');
+const clipStatus = document.querySelector('#clip-status');
+const clipSpinner = document.querySelector('#clip-spinner');
+const countdownSeconds = params.has('fast') ? 1 : COUNTDOWN_SEC;
 let currentScreen = 'welcome';
 let camera = null;
 let animationId = null;
@@ -46,6 +57,13 @@ let resultDate = null;
 let resultBlob = null;
 let resultFile = null;
 let resultFilename = '';
+let clipTimer = null;
+let clipStream = null;
+let clipRun = 0;
+let clipUrl = null;
+let clipBlob = null;
+let clipFile = null;
+let clipFilename = '';
 
 function resetCaptureControls() {
   countdown.hidden = true;
@@ -60,6 +78,8 @@ function resetCaptureControls() {
 
 function cancelCapture() {
   captureRun += 1;
+  clearTimeout(clipTimer);
+  clipTimer = null;
   clearTimeout(captureTimer);
   captureTimer = null;
   if (resolveDelay) resolveDelay(false);
@@ -98,7 +118,29 @@ async function captureSequence() {
   flipButton.disabled = true;
 
   try {
+    const mimeType = pickMimeType();
+    let clipsEnabled = mimeType !== null && clipStream !== null;
     for (let i = 0; i < SHOTS; i += 1) {
+      let clipPromise = null;
+      if (clipsEnabled) {
+        const startClip = () => {
+          clipTimer = null;
+          clipPromise = (async () => {
+            try {
+              return await recordClip(clipStream, Math.min(CLIP_MS, countdownSeconds * 1000), mimeType);
+            } catch {
+              if (run === captureRun) {
+                clipsEnabled = false;
+                state.clips = [];
+              }
+              return null;
+            }
+          })();
+        };
+        const delay = Math.max(0, countdownSeconds * 1000 - CLIP_MS);
+        if (delay) clipTimer = setTimeout(startClip, delay);
+        else startClip();
+      }
       shotCounter.textContent = `${i + 1}/${SHOTS}`;
       countdown.hidden = false;
       for (let seconds = countdownSeconds; seconds > 0; seconds -= 1) {
@@ -110,6 +152,9 @@ async function captureSequence() {
       state.photos.push(grabFrame(camera.video, slotAspect(state.frame), state.facing === 'user'));
       if (!await captureDelay(150) || run !== captureRun) return;
       flash.hidden = true;
+      const clip = await clipPromise;
+      if (run !== captureRun) return;
+      if (clipsEnabled && clip) state.clips.push(clip);
     }
     capturing = false;
     show('select');
@@ -120,6 +165,8 @@ async function captureSequence() {
 
 function releaseCamera() {
   cancelCapture();
+  clipStream?.getTracks().forEach(track => track.stop());
+  clipStream = null;
   cameraRequest += 1;
   cancelAnimationFrame(animationId);
   animationId = null;
@@ -159,13 +206,21 @@ async function startCamera() {
     const render = () => {
       if (request !== cameraRequest || currentScreen !== 'capture') return;
       try {
-        drawPreview(camera.video, preview, slotAspect(state.frame), state.facing === 'user', state.filter.matrix);
+        drawPreview(camera.video, preview, slotAspect(state.frame), state.facing === 'user', state.filter.matrix, raw);
         animationId = requestAnimationFrame(render);
       } catch (error) {
         showCameraError(error);
       }
     };
     render();
+    if (request === cameraRequest && camera && pickMimeType()) {
+      try {
+        clipStream = raw.captureStream(30);
+      } catch {
+        // Recording is optional; photos still work without canvas capture support.
+        clipStream = null;
+      }
+    }
   } catch (error) {
     if (request === cameraRequest && currentScreen === 'capture') showCameraError(error);
   }
@@ -197,6 +252,7 @@ export function show(screenName) {
 }
 
 function clearResult() {
+  clearClip();
   resultRun += 1;
   state.result = null;
   resultBlob = null;
@@ -205,6 +261,73 @@ function clearResult() {
   shareButton.disabled = true;
   shareButton.hidden = true;
   resultPreview.replaceChildren();
+}
+
+function clearClip() {
+  clipRun += 1;
+  clipBlob = null;
+  clipFile = null;
+  behindVideo.pause();
+  behindVideo.removeAttribute('src');
+  behindVideo.load();
+  behindVideo.hidden = true;
+  if (clipUrl) URL.revokeObjectURL(clipUrl);
+  clipUrl = null;
+  makeClipButton.hidden = state.clips.length !== SHOTS;
+  makeClipButton.disabled = false;
+  saveClipButton.hidden = true;
+  shareClipButton.hidden = true;
+  clipSpinner.hidden = true;
+  clipStatus.textContent = '';
+  makeClipButton.setAttribute('aria-busy', 'false');
+}
+
+async function makeClip() {
+  if (state.clips.length !== SHOTS || makeClipButton.disabled || currentScreen !== 'result') return;
+  clearClip();
+  const run = clipRun;
+  makeClipButton.disabled = true;
+  makeClipButton.setAttribute('aria-busy', 'true');
+  clipSpinner.hidden = false;
+  clipStatus.textContent = 'Đang tạo clip…';
+  try {
+    const mimeType = pickMimeType();
+    if (!mimeType) throw new Error('Clip không khả dụng.');
+    // Keep the caption date identical to the photo, even across midnight.
+    const frame = { ...state.frame, caption: state.frame.caption && {
+      ...state.frame.caption,
+      text: state.frame.caption.text.replaceAll('{date}', formatDate(resultDate)),
+    } };
+    const blob = await renderBehind(frame, state.selected.map(index => state.clips[index]), state.filter.matrix, mimeType);
+    if (run !== clipRun || currentScreen !== 'result') return;
+    clipBlob = blob;
+    const extension = blob.type.startsWith('video/mp4') ? 'mp4' : 'webm';
+    clipFilename = resultFilename.replace(/\.jpg$/, `.${extension}`);
+    clipUrl = URL.createObjectURL(blob);
+    behindVideo.src = clipUrl;
+    behindVideo.hidden = false;
+    saveClipButton.hidden = false;
+    if (typeof File !== 'undefined') {
+      clipFile = new File([blob], clipFilename, { type: blob.type });
+      try {
+        shareClipButton.hidden = !navigator.share || !navigator.canShare?.({ files: [clipFile] });
+      } catch {
+        shareClipButton.hidden = true;
+      }
+    }
+    shareClipButton.disabled = false;
+    clipStatus.textContent = 'Clip đã sẵn sàng để lưu hoặc chia sẻ.';
+  } catch {
+    if (run === clipRun && currentScreen === 'result') {
+      clipStatus.textContent = 'Chưa tạo được clip. Bạn có thể thử lại hoặc lưu ảnh.';
+    }
+  } finally {
+    if (run === clipRun) {
+      makeClipButton.disabled = false;
+      makeClipButton.setAttribute('aria-busy', 'false');
+      clipSpinner.hidden = true;
+    }
+  }
 }
 
 async function renderResult() {
@@ -360,6 +483,36 @@ flipButton.addEventListener('click', () => {
 });
 shootButton.addEventListener('click', captureSequence);
 stopButton.addEventListener('click', cancelCapture);
+makeClipButton.addEventListener('click', makeClip);
+saveClipButton.addEventListener('click', () => {
+  if (!clipBlob) return;
+  try {
+    downloadBlob(clipBlob, clipFilename);
+    clipStatus.textContent = 'Đã bắt đầu tải clip về thiết bị.';
+  } catch {
+    clipStatus.textContent = 'Chưa lưu được clip. Vui lòng thử lại.';
+  }
+});
+shareClipButton.addEventListener('click', async () => {
+  if (!clipFile) return;
+  const file = clipFile;
+  shareClipButton.disabled = true;
+  try {
+    const outcome = await shareOrNull(file);
+    if (clipFile !== file || currentScreen !== 'result') return;
+    if (outcome === 'shared') clipStatus.textContent = 'Đã chia sẻ clip.';
+    if (outcome === null) {
+      shareClipButton.hidden = true;
+      clipStatus.textContent = 'Thiết bị chưa hỗ trợ chia sẻ clip. Bạn có thể lưu clip về máy.';
+    }
+  } catch {
+    if (clipFile === file && currentScreen === 'result') {
+      clipStatus.textContent = 'Chưa chia sẻ được clip. Vui lòng thử lại hoặc lưu clip về máy.';
+    }
+  } finally {
+    if (clipFile === file) shareClipButton.disabled = false;
+  }
+});
 saveButton.addEventListener('click', () => {
   if (!resultBlob) return;
   try {
@@ -402,7 +555,10 @@ document.querySelectorAll('[data-action="again"]').forEach(button => {
   });
 });
 
-window.addEventListener('pagehide', releaseCamera);
+window.addEventListener('pagehide', () => {
+  releaseCamera();
+  clearClip();
+});
 window.addEventListener('pageshow', event => {
   if (event.persisted && currentScreen === 'capture') startCamera();
 });
