@@ -128,3 +128,12 @@ Số kiểu chụp (8), số ảnh chọn (4), giây đếm ngược (5), độ 
 - Mẫu màu và chữ cụ thể của các khung khởi đầu.
 - Cách hiện filter trên camera trực tiếp (theo ràng buộc ở mục 8).
 - Cách cắt và ghép đoạn video cho clip "behind".
+
+## 13. Thay đổi v2 (24/10, theo yêu cầu chủ dự án sau khi chạy thử)
+
+Chủ dự án yêu cầu: "khi chụp không chạy giây mà có nút chụp", "thêm sticker xung quanh ảnh", "filter chất lượng hơn". Các mục dưới đây **thay thế** phần tương ứng ở trên.
+
+- **Nút chụp thay đếm ngược** (thay mục 6 bước 3): bỏ hoàn toàn đếm ngược. Màn chụp có một nút chụp tròn lớn; mỗi lần bấm chụp ngay 1 kiểu (có chớp trắng), bộ đếm "3/8". Đủ 8 kiểu thì sang màn chọn ảnh. Nút "Chụp lại từ đầu" hiện khi đã có ít nhất 1 ảnh, bấm thì bỏ hết ảnh. Không đổi được camera khi đã chụp dở.
+- **Clip "behind"** (thay mục 7, phần ghi lúc chụp): vì không biết trước lúc bấm, trang giữ liên tục khoảng `CLIP_MS` gần nhất dưới dạng các khung hình nhỏ chưa filter (`CLIP_FPS` hình/giây). Khi bấm chụp, các khung hình đó thành clip của kiểu ảnh ấy. Lúc xuất, trang phát lại các khung hình của 4 ảnh đã chọn trong khung, rồi ghi lại bằng `MediaRecorder`. Không còn ghi video lúc chụp.
+- **Sticker** (thu hẹp non-goal "không sticker kéo thả"): có các bộ sticker emoji, tự xếp ở góc mỗi ô ảnh (đè một nửa lên mép ảnh, nghiêng nhẹ) và hai bên dòng chữ chân khung. Chọn bộ sticker ở màn kết quả, mặc định là "Trái tim", có lựa chọn "Không". Sticker có cả trong ảnh lẫn clip. Vẫn không có kéo thả.
+- **Filter** (thay mục 8, phần filter): mỗi filter là bộ thông số `exposure, contrast, saturation, temperature, tint, fade, vignette, grain`, áp bằng một hàm duy nhất cho cả xem trước, ảnh và clip. Có 7 filter: Gốc, Trong trẻo, Hồng đào, Film ấm, Mát lạnh, Đen trắng, Cổ điển. Vẫn cấm `ctx.filter`.

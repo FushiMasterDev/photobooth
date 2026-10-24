@@ -235,3 +235,88 @@ Screens: `welcome` (title + "Bắt đầu") → `frames` (thumbnails drawn from 
 ## Done when
 
 All six tasks are committed, `npm test` passes, and the owner has tested on a real iPhone (Safari) and a real Android phone (Chrome) over HTTPS: permissions, preview colors matching the export, share sheet, save, and clip.
+
+---
+
+# v2 tasks (spec section 13)
+
+Execution is the same as v1: Codex implements one task per run, the supervisor verifies and commits. Global Constraints still apply, except `COUNTDOWN_SEC` and `?fast` are removed in Task 8.
+
+### Task 7: Filter engine v2
+
+**Files:** Modify `js/filters.js`, `js/camera.js`, `js/compose.js`, `js/behind.js`, `js/app.js`, `README.md`. Test: `tests/filters.test.js` (rewrite).
+
+**Interfaces:**
+- `FILTERS: {id, name, params}[]`, where `params` is a partial `{exposure, contrast, saturation, temperature, tint, fade, vignette, grain}`. Missing keys default to `exposure 0, contrast 0, saturation 1, temperature 0, tint 0, fade 0, vignette 0, grain 0`.
+- `applyFilter(imageData: {data, width, height}, filter) -> imageData` mutates in place. It returns immediately when all params are default.
+- `applyMatrix` is removed. Every consumer takes the filter **object** instead of a matrix: `drawPreview(video, canvas, aspect, mirror, filter, raw)`, `createStripRenderer(frame, filter, date, scale)`, `composeStrip(frame, photos, filter, date)`, `renderBehind(frame, clips, filter, mimeType, scale)`.
+
+Algorithm (values in 0..1 unless noted):
+1. Per filter, build and cache 3 lookup tables (256 entries each), keyed by filter object. For input `c/255`:
+   - `v *= 2 ** exposure`
+   - `v = (v - 0.5) * (1 + contrast) + 0.5`
+   - `v = fade + v * (1 - fade)`
+   - Then R adds `temperature * 0.1`, B subtracts `temperature * 0.1`, G subtracts `tint * 0.08`.
+   - Clamp to 0..1, ×255.
+2. Per pixel: look up each channel. If `saturation !== 1`: `l = .299r + .587g + .114b; ch = l + (ch - l) * saturation`.
+3. If `vignette`: multiply RGB by `1 - vignette * smoothstep(0.45, 1.0, d)`. Here `d` is distance from the center divided by half the diagonal. Cache the per-pixel factors as a `Float32Array` keyed by `width x height`.
+4. If `grain`: add the same `(Math.random() - 0.5) * grain * 255` to R, G and B. Alpha is never touched.
+
+Filters (exact):
+- `original` "Gốc": `{}`
+- `clear` "Trong trẻo": `{exposure: .15, contrast: -.08, saturation: .92, temperature: .02, tint: -.04, fade: .04}`
+- `peach` "Hồng đào": `{exposure: .08, contrast: .05, saturation: 1.05, temperature: .25, tint: -.15, fade: .03}`
+- `film` "Film ấm": `{exposure: .02, contrast: .12, saturation: .85, temperature: .35, fade: .1, vignette: .35, grain: .06}`
+- `cool` "Mát lạnh": `{exposure: .05, contrast: .08, saturation: .9, temperature: -.35, tint: .05}`
+- `bw` "Đen trắng": `{saturation: 0, contrast: .25, fade: .03, vignette: .25, grain: .05}`
+- `vintage` "Cổ điển": `{contrast: -.05, saturation: .6, temperature: .45, fade: .15, vignette: .4, grain: .08}`
+
+- [ ] Step 1: Rewrite `tests/filters.test.js`. Use a helper `img(w, h, rgba)` that fills a `{data, width, height}`. Tests:
+  - original leaves `[10,20,30,255]` unchanged;
+  - bw (with `grain` overridden to 0 via `{...bw, params: {...bw.params, grain: 0}}`) gives r === g === b;
+  - output stays within 0..255 for `[255,255,255,255]` with clear, and for `[0,0,0,255]` with cool;
+  - alpha 128 is untouched by every filter;
+  - with `{vignette: .5}` on a uniform 101×101 grey 128 image, the center pixel is 128 and the corner pixel is < 100;
+  - warm/cool direction: film raises R relative to B on grey 128, cool raises B relative to R;
+  - ids are unique, there are exactly 7, and the first is `original`.
+- [ ] Step 2: Implement `applyFilter`. Swap every consumer to filter objects and update the README "Thêm bộ lọc" section to document the params.
+- [ ] Step 3: `npm test` passes. The supervisor renders a test swatch through every filter in Chrome and checks the screenshots.
+
+### Task 8: Shutter button + frame-buffer clip
+
+**Files:** Modify `js/config.js` (remove `COUNTDOWN_SEC`, add `CLIP_FPS = 10`), `js/app.js`, `js/behind.js`, `index.html`, `styles.css`, `README.md`.
+
+**Interfaces:**
+- Capture: the round shutter button `data-action="shoot"` grabs one photo per press (`grabFrame` as before, with a flash). The counter shows `n/SHOTS`. On the `SHOTS`-th photo, go to `select`. `data-action="stop"` ("Chụp lại từ đầu") is visible when `photos.length > 0` and clears photos and clips. `flip` is disabled while `photos.length > 0`. Remove the countdown, `?fast`, and `recordClip`.
+- Clip buffer (only if `pickMimeType()` is non-null): in the preview loop, at most every `1000 / CLIP_FPS` ms, draw `raw` into a new small canvas of width `round(slot.w * 0.5)` (height by aspect). Push it into a ring holding at most `CLIP_MS / 1000 * CLIP_FPS` canvases. On each shot, `state.clips.push(ring)` (oldest first) and start a fresh ring.
+- `renderBehind(frame, clips: HTMLCanvasElement[][], filter, mimeType, scale = 0.5) -> Promise<Blob>` steps `k = 0..maxLen-1`, drawing `clips[i][min(k, len-1)]` in each slot through `createStripRenderer`. It holds each step `1000 / CLIP_FPS` ms, records `canvas.captureStream(CLIP_FPS)` in real time, and keeps the existing timeout and cleanup.
+- `?noclip` still disables clips. "Tạo clip" shows only when `state.clips.length === SHOTS` and every clip has ≥ 1 frame.
+
+- [ ] Step 1: Implement. Update the README (remove `?fast`, remove the "đếm ngược" config line).
+- [ ] Step 2: `npm test` passes. In the supervisor's headless run, 8 presses spaced 300ms apart reach `select`. "Chụp lại từ đầu" after 2 presses resets the counter to `0/8`. The clip renders with a duration of about 0.3–2 s and is playable. `?noclip` hides the clip button.
+
+### Task 9: Stickers
+
+**Files:** Create `js/stickers.js`, `tests/stickers.test.js`. Modify `js/compose.js`, `js/behind.js`, `js/app.js`, `index.html`, `styles.css`, `README.md`.
+
+**Interfaces:**
+- `STICKERS: {id, name, emojis: string[]}[]`:
+  - `none` "Không" `[]`
+  - `hearts` "Trái tim" `['💖','💕','💗']`
+  - `sparkle` "Lấp lánh" `['✨','⭐','🌟']`
+  - `flowers` "Hoa" `['🌸','🌷','🌼']`
+  - `bears` "Gấu" `['🧸','🎀','🍓']`
+- `stickerPlacements(frame, set) -> {emoji, x, y, size, angle}[]` is pure and deterministic, in frame px.
+  - For slot `i`: two stickers, `s = round(min(w, h) * 0.22)`. Even `i`: top-left corner `(x, y)` and bottom-right `(x+w, y+h)`. Odd `i`: top-right `(x+w, y)` and bottom-left `(x, y+h)`. `angle = (k === 0 ? -15 : 15)` degrees. `emoji = set.emojis[(2*i + k) % len]`.
+  - If `frame.caption`: two more at `(caption.x ± frame.width * 0.38, caption.y - s2 * 0.35)` with `s2 = round(frame.width * 0.1)`, angle 0, emojis 0 and 1.
+  - An empty set gives `[]`.
+- `createStripRenderer(frame, filter, date, scale, sticker = null)` draws placements on the foreground layer, scaled. Font is `${size}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`, center/middle, rotated. `composeStrip` and `renderBehind` gain a trailing `sticker` param.
+- Result screen: sticker chips `data-sticker="<id>"`, default `hearts`. Changing it re-composes the photo and clears any made clip (like a filter change).
+
+- [ ] Step 1: Tests in `tests/stickers.test.js`:
+  - for every frame × `hearts`: count is 10 and all centers are within `0..width`/`0..height`;
+  - `none` gives 0;
+  - the first strip placement is `{emoji: '💖', x: 30, y: 30, angle: -15}` with size `round(380 * .22)`;
+  - the same input gives a deepEqual output (deterministic).
+- [ ] Step 2: Implement. Add "Thêm bộ sticker" to the README.
+- [ ] Step 3: `npm test` passes. The supervisor screenshots strip and grid results with stickers, and a clip.
