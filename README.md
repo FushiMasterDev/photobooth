@@ -78,6 +78,18 @@ Mở `js/filters.js`, sao chép một object trong `FILTERS`, đổi `id` thành
 
 Ba bảng tra màu được lưu theo object bộ lọc; khi thay đổi thông số trong lúc chạy, tạo object bộ lọc mới thay vì sửa object cũ. Trọng số tối góc được lưu theo kích thước ảnh. Xem trước camera, ảnh ghép và clip đều truyền cùng object bộ lọc qua hàm này; hạt được tạo ngẫu nhiên ở mỗi lần vẽ. Chỉ lọc bản dùng để hiển thị hoặc ghép; ảnh chụp gốc và nguồn clip luôn được giữ chưa lọc. Không dùng thuộc tính lọc màu của Canvas 2D vì Safari iOS không hỗ trợ.
 
+## Thêm bộ sticker
+
+Màn kết quả có các bộ **Không**, **Trái tim** (mặc định), **Lấp lánh**, **Hoa** và **Gấu**. Chọn bộ khác sẽ ghép lại ảnh và xoá clip đã tạo; bấm **Tạo clip** để tạo lại clip với sticker hiện tại. Sticker xuất hiện trong cả ảnh lưu và clip, tự xếp ở góc các ô ảnh và hai bên dòng chữ chân khung.
+
+Mở `js/stickers.js` và thêm một object vào `STICKERS`, đặt `id` duy nhất, `name` bằng tiếng Việt và `emojis` là danh sách emoji:
+
+```js
+{ id: 'buom', name: 'Bướm', emojis: ['🦋', '🌿', '🌈'] },
+```
+
+Không cần sửa giao diện hay logic ghép ảnh. Danh sách `emojis: []` tắt sticker. Hàm thuần `stickerPlacements(frame, set)` trả về vị trí theo pixel của khung: mỗi ô có hai sticker nằm giữa mép góc, luân phiên cặp góc và nghiêng ±15°, kích thước bằng 22% cạnh ngắn của ô. Nếu có chú thích, hai sticker chân khung có kích thước bằng 10% chiều rộng khung. Ảnh và clip dùng chung lớp trang trí, được thu phóng theo kích thước xuất và không áp bộ lọc màu lên sticker. Hình dáng emoji có thể khác nhẹ giữa các thiết bị do phông chữ hệ thống.
+
 ## Đổi số kiểu chụp và thiết lập clip
 
 Sửa `js/config.js`: `SHOTS` là số kiểu chụp (mặc định 8), `PICK` là số ảnh chọn (4). `CLIP_MS` (2000 ms) là độ dài tối đa của bộ đệm trước mỗi lần chụp; `CLIP_FPS` (10 hình/giây) là tốc độ lấy và phát lại khung hình clip. Các thiết lập chung khác cũng nằm tại đây: `EXPORT_TYPE` (`image/jpeg`), `EXPORT_QUALITY` (0.92) và `PREVIEW_MAX_W` (480 px).

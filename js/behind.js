@@ -28,7 +28,7 @@ function startRecording(stream, mimeType) {
   return { done, stop };
 }
 
-export async function renderBehind(frame, clips, filter, mimeType, scale = 0.5) {
+export async function renderBehind(frame, clips, filter, mimeType, scale = 0.5, sticker = null) {
   let stream;
   let recording;
   let stepTimer;
@@ -37,7 +37,7 @@ export async function renderBehind(frame, clips, filter, mimeType, scale = 0.5) 
     if (!clips.length || clips.some(clip => !clip.length)) {
       throw new Error('Clip chưa có hình ảnh.');
     }
-    const render = await createStripRenderer(frame, filter, new Date(), scale);
+    const render = await createStripRenderer(frame, filter, new Date(), scale, sticker);
     const sourcesAt = k => clips.map(clip => clip[Math.min(k, clip.length - 1)]);
     const maxLen = Math.max(...clips.map(clip => clip.length));
     const canvas = render(sourcesAt(0));

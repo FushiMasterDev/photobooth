@@ -13,7 +13,7 @@ export const STRIP = {
   ],
   caption: {
     text: 'PHOTOBOOTH · {date}', x: 300, y: 1700,
-    font: '600 40px sans-serif', color: '#333333', align: 'center',
+    font: '600 32px sans-serif', color: '#333333', align: 'center',
   },
 };
 

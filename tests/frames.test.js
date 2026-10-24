@@ -57,7 +57,7 @@ test('six starter frames have the specified geometry, colors and captions', () =
       text: 'PHOTOBOOTH · {date}',
       x: strip ? 300 : 600,
       y: strip ? 1700 : 1690,
-      font: strip ? '600 40px sans-serif' : '600 56px sans-serif',
+      font: strip ? '600 32px sans-serif' : '600 56px sans-serif',
       color: id === 'strip-black' ? '#ffffff' : '#333333',
       align: 'center',
     }, id);

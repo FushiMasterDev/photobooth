@@ -116,7 +116,7 @@ For the coverCrop portrait case, assert each field with `Math.round(x * 10) / 10
   - `applyMatrix(imageData: {data: Uint8ClampedArray}, matrix: number[20]) -> imageData` mutates in place, returns its argument, and skips work when the matrix is identity.
 
 Frame geometry (exact values):
-- strip 600×1800: slots `x=30, w=540, h=380, y = 30 + i*402` (i = 0..3). Caption `y=1700, x=300, font='600 40px sans-serif'`.
+- strip 600×1800: slots `x=30, w=540, h=380, y = 30 + i*402` (i = 0..3). Caption `y=1700, x=300, font='600 32px sans-serif'` (was 40px; shrunk in Task 9 to make room for caption stickers).
 - grid 1200×1800: slots `w=545, h=755` at `(40,40) (615,40) (40,825) (615,825)`. Caption `y=1690, x=600, font='600 56px sans-serif'`.
 - Six frames: `strip-pink #ffd6e0`, `strip-black #111111` (caption `#ffffff`), `strip-cream #f5efe6`, `grid-white #ffffff`, `grid-sky #cfe8ff`, `grid-lilac #e3d7ff`. Other captions use `#333333`. Caption text is `'PHOTOBOOTH · {date}'`.
 
@@ -306,10 +306,11 @@ Filters (exact):
   - `sparkle` "Lấp lánh" `['✨','⭐','🌟']`
   - `flowers` "Hoa" `['🌸','🌷','🌼']`
   - `bears` "Gấu" `['🧸','🎀','🍓']`
-- `stickerPlacements(frame, set) -> {emoji, x, y, size, angle}[]` is pure and deterministic, in frame px.
-  - For slot `i`: two stickers, `s = round(min(w, h) * 0.22)`. Even `i`: top-left corner `(x, y)` and bottom-right `(x+w, y+h)`. Odd `i`: top-right `(x+w, y)` and bottom-left `(x, y+h)`. `angle = (k === 0 ? -15 : 15)` degrees. `emoji = set.emojis[(2*i + k) % len]`.
-  - If `frame.caption`: two more at `(caption.x ± frame.width * 0.38, caption.y - s2 * 0.35)` with `s2 = round(frame.width * 0.1)`, angle 0, emojis 0 and 1.
-  - An empty set gives `[]`.
+- `stickerPlacements(frame, set) -> {emoji, x, y, size, angle}[]` is pure and deterministic, in frame px. *(Revised after the visual check: corner-centered stickers were clipped by thin margins and piled up across slot gaps.)*
+  - Per slot: "left" is `cx < frameCenterX`, alternating by index (even = left) when a slot is centered. "Top" is `cy <= frameCenterY`.
+  - Big sticker: `round(min(w, h) * .24)` on the (left, top) corner. Small sticker: `.15` on the same side, opposite vertical corner. Both are inset `0.3 * size` on each axis. Angles are ∓12 (left = -12, the small one flips sign). Emojis `2i`, `2i+1`.
+  - Caption: two at `caption.x ± width * .42`, `y = caption.y - s * .35`, `s = round(width * .08)`.
+  - Tests check that every sticker is fully inside the canvas, that no two centers are closer than `0.9 × mean size`, and that caption stickers clear the caption text.
 - `createStripRenderer(frame, filter, date, scale, sticker = null)` draws placements on the foreground layer, scaled. Font is `${size}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`, center/middle, rotated. `composeStrip` and `renderBehind` gain a trailing `sticker` param.
 - Result screen: sticker chips `data-sticker="<id>"`, default `hearts`. Changing it re-composes the photo and clears any made clip (like a filter change).
 

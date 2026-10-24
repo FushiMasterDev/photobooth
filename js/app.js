@@ -1,5 +1,6 @@
 import { FRAMES, slotAspect } from './frames.js';
 import { FILTERS } from './filters.js';
+import { STICKERS } from './stickers.js';
 import { PREVIEW_MAX_W, SHOTS, PICK, CLIP_MS, CLIP_FPS, EXPORT_TYPE, EXPORT_QUALITY } from './config.js';
 import { cameraErrorMessage, toggleSelection, formatDate } from './util.js';
 import { openCamera, stopCamera, drawPreview, grabFrame } from './camera.js';
@@ -13,6 +14,7 @@ if (params.has('noclip')) window.MediaRecorder = undefined;
 export const state = {
   frame: FRAMES[0],
   filter: FILTERS[0],
+  sticker: STICKERS.find(set => set.id === 'hearts'),
   facing: 'user',
   photos: [],
   clips: [],
@@ -260,7 +262,7 @@ async function makeClip() {
       ...state.frame.caption,
       text: state.frame.caption.text.replaceAll('{date}', formatDate(resultDate)),
     } };
-    const blob = await renderBehind(frame, state.selected.map(index => state.clips[index]), state.filter, mimeType);
+    const blob = await renderBehind(frame, state.selected.map(index => state.clips[index]), state.filter, mimeType, 0.5, state.sticker);
     if (run !== clipRun || currentScreen !== 'result') return;
     clipBlob = blob;
     const extension = blob.type.startsWith('video/mp4') ? 'mp4' : 'webm';
@@ -298,7 +300,7 @@ async function renderResult() {
   resultPreview.setAttribute('aria-busy', 'true');
   resultStatus.textContent = 'Đang ghép ảnh…';
   try {
-    const canvas = await composeStrip(state.frame, state.selected.map(index => state.photos[index]), state.filter, resultDate);
+    const canvas = await composeStrip(state.frame, state.selected.map(index => state.photos[index]), state.filter, resultDate, state.sticker);
     if (run !== resultRun || currentScreen !== 'result') return;
     const blob = await canvasToBlob(canvas, EXPORT_TYPE, EXPORT_QUALITY);
     if (run !== resultRun || currentScreen !== 'result') return;
@@ -432,6 +434,32 @@ function renderFilters(chips) {
   }
 }
 
+function renderStickers() {
+  const chips = document.querySelector('#result-stickers');
+  for (const sticker of STICKERS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'sticker-chip';
+    button.dataset.sticker = sticker.id;
+    button.setAttribute('aria-pressed', String(sticker === state.sticker));
+    if (sticker.emojis.length) {
+      const emoji = document.createElement('span');
+      emoji.setAttribute('aria-hidden', 'true');
+      emoji.textContent = sticker.emojis[0];
+      button.append(emoji, ' ');
+    }
+    button.append(sticker.name);
+    button.addEventListener('click', () => {
+      state.sticker = sticker;
+      chips.querySelectorAll('[data-sticker]').forEach(chip => {
+        chip.setAttribute('aria-pressed', String(chip.dataset.sticker === sticker.id));
+      });
+      if (currentScreen === 'result') renderResult();
+    });
+    chips.append(button);
+  }
+}
+
 document.querySelector('[data-action="start"]').addEventListener('click', () => show('frames'));
 document.querySelector('[data-action="home"]').addEventListener('click', () => show('welcome'));
 document.querySelector('[data-action="next"]').addEventListener('click', () => show('capture'));
@@ -528,4 +556,5 @@ window.addEventListener('pageshow', event => {
 renderFrames();
 renderFilters(document.querySelector('#capture-filters'));
 renderFilters(document.querySelector('#result-filters'));
+renderStickers();
 updateCaptureControls();

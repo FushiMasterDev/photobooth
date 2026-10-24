@@ -1,5 +1,6 @@
 import { applyFilter } from './filters.js';
 import { coverCrop, formatDate } from './util.js';
+import { stickerPlacements } from './stickers.js';
 
 const images = new Map();
 
@@ -18,13 +19,13 @@ export function loadImage(src) {
   return images.get(src);
 }
 
-export async function composeStrip(frame, photos, filter, date) {
-  const render = await createStripRenderer(frame, filter, date);
+export async function composeStrip(frame, photos, filter, date, sticker = null) {
+  const render = await createStripRenderer(frame, filter, date, 1, sticker);
   return render(photos);
 }
 
 // Prepare the decorative layers once; photos and moving clips share this renderer.
-export async function createStripRenderer(frame, filter, date, scale = 1) {
+export async function createStripRenderer(frame, filter, date, scale = 1, sticker = null) {
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(frame.width * scale));
   canvas.height = Math.max(1, Math.round(frame.height * scale));
@@ -45,14 +46,29 @@ export async function createStripRenderer(frame, filter, date, scale = 1) {
   if (frame.overlayImage) {
     fg.drawImage(await loadImage(frame.overlayImage), 0, 0, canvas.width, canvas.height);
   }
+  fg.save();
+  fg.scale(scale, scale);
   if (frame.caption) {
     const caption = frame.caption;
-    fg.scale(scale, scale);
     fg.font = caption.font;
     fg.fillStyle = caption.color;
     fg.textAlign = caption.align;
     fg.fillText(caption.text.replaceAll('{date}', formatDate(date)), caption.x, caption.y);
   }
+  if (sticker) {
+    for (const { emoji, x, y, size, angle } of stickerPlacements(frame, sticker)) {
+      fg.save();
+      fg.translate(x, y);
+      fg.rotate(angle * Math.PI / 180);
+      fg.font = `${size}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+      fg.fillStyle = '#000000';
+      fg.textAlign = 'center';
+      fg.textBaseline = 'middle';
+      fg.fillText(emoji, 0, 0);
+      fg.restore();
+    }
+  }
+  fg.restore();
   const slots = frame.slots.map(slot => {
     const layer = document.createElement('canvas');
     layer.width = Math.max(1, Math.round(slot.w * scale));
