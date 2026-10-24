@@ -49,12 +49,36 @@
         <p class="intro">Canh dáng trong khung, chọn tông màu bạn thích.</p>
         <div class="preview-wrap" aria-busy="true">
           <canvas id="preview" width="480" height="338" role="img" aria-label="Xem trước camera theo đúng tỉ lệ ô ảnh"></canvas>
+          <span id="countdown" class="countdown" role="status" aria-live="assertive" aria-atomic="true" hidden></span>
+          <span id="capture-flash" class="capture-flash" aria-hidden="true" hidden></span>
         </div>
+        <p id="shot-counter" class="shot-counter" role="status" aria-atomic="true"></p>
         <p id="camera-status" class="selection-note" role="status">Đang mở camera…</p>
         <div id="capture-filters" class="filter-chips" role="group" aria-label="Bộ lọc ảnh"></div>
         <div class="actions">
           <button type="button" class="button primary" data-action="shoot" disabled>Bắt đầu chụp</button>
+          <button type="button" class="button secondary" data-action="stop" hidden>Dừng</button>
           <p class="footnote">Camera trước hiển thị như khi bạn soi gương.</p>
+        </div>
+      </section>
+
+      <section class="screen" data-screen="select" aria-labelledby="select-title" hidden>
+        <p class="eyebrow">Giữ lại những nụ cười</p>
+        <h1 id="select-title" tabindex="-1">Chọn ảnh bạn thích nhất</h1>
+        <p id="select-intro" class="intro"></p>
+        <div id="photo-picker" class="photo-picker" role="group" aria-label="Ảnh vừa chụp"></div>
+        <div class="actions">
+          <p id="photo-choice" class="selection-note" role="status"></p>
+          <button type="button" class="button primary" data-action="continue" disabled>Tiếp tục <span aria-hidden="true">→</span></button>
+          <button type="button" class="button secondary" data-action="again">Chụp lại</button>
+        </div>
+      </section>
+
+      <section class="screen" data-screen="result" aria-labelledby="result-title" hidden>
+        <p class="brand">photobooth <span aria-hidden="true">✿</span></p>
+        <h1 id="result-title" tabindex="-1">Đã chọn đủ ảnh</h1>
+        <div class="actions">
+          <button type="button" class="button secondary" data-action="again">Chụp lại</button>
         </div>
       </section>
 

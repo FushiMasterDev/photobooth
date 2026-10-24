@@ -1,8 +1,8 @@
 import { FRAMES, slotAspect } from './frames.js';
 import { FILTERS } from './filters.js';
-import { PREVIEW_MAX_W } from './config.js';
-import { cameraErrorMessage } from './util.js';
-import { openCamera, stopCamera, drawPreview } from './camera.js';
+import { PREVIEW_MAX_W, SHOTS, PICK, COUNTDOWN_SEC } from './config.js';
+import { cameraErrorMessage, toggleSelection } from './util.js';
+import { openCamera, stopCamera, drawPreview, grabFrame } from './camera.js';
 
 export const state = {
   frame: FRAMES[0],
@@ -19,12 +19,95 @@ const previewWrap = document.querySelector('.preview-wrap');
 const status = document.querySelector('#camera-status');
 const flipButton = document.querySelector('[data-action="flip"]');
 const shootButton = document.querySelector('[data-action="shoot"]');
+const stopButton = document.querySelector('[data-action="stop"]');
+const countdown = document.querySelector('#countdown');
+const shotCounter = document.querySelector('#shot-counter');
+const flash = document.querySelector('#capture-flash');
+const photoPicker = document.querySelector('#photo-picker');
+const continueButton = document.querySelector('[data-action="continue"]');
+const countdownSeconds = new URLSearchParams(window.location.search).has('fast') ? 1 : COUNTDOWN_SEC;
 let currentScreen = 'welcome';
 let camera = null;
 let animationId = null;
 let cameraRequest = 0;
+let capturing = false;
+let captureRun = 0;
+let captureTimer = null;
+let resolveDelay = null;
+
+function resetCaptureControls() {
+  countdown.hidden = true;
+  countdown.textContent = '';
+  flash.hidden = true;
+  shotCounter.textContent = `0/${SHOTS}`;
+  stopButton.hidden = true;
+  shootButton.hidden = false;
+  shootButton.disabled = !camera;
+  flipButton.disabled = !camera;
+}
+
+function cancelCapture() {
+  captureRun += 1;
+  clearTimeout(captureTimer);
+  captureTimer = null;
+  if (resolveDelay) resolveDelay(false);
+  resolveDelay = null;
+  if (capturing) {
+    state.photos = [];
+    state.clips = [];
+    state.selected = [];
+  }
+  capturing = false;
+  resetCaptureControls();
+}
+
+function captureDelay(ms) {
+  return new Promise(resolve => {
+    resolveDelay = resolve;
+    captureTimer = setTimeout(() => {
+      captureTimer = null;
+      resolveDelay = null;
+      resolve(true);
+    }, ms);
+  });
+}
+
+async function captureSequence() {
+  if (capturing || !camera || currentScreen !== 'capture') return;
+  cancelCapture();
+  const run = captureRun;
+  capturing = true;
+  state.photos = [];
+  state.clips = [];
+  state.selected = [];
+  shootButton.hidden = true;
+  shootButton.disabled = true;
+  stopButton.hidden = false;
+  flipButton.disabled = true;
+
+  try {
+    for (let i = 0; i < SHOTS; i += 1) {
+      shotCounter.textContent = `${i + 1}/${SHOTS}`;
+      countdown.hidden = false;
+      for (let seconds = countdownSeconds; seconds > 0; seconds -= 1) {
+        countdown.textContent = String(seconds);
+        if (!await captureDelay(1000) || run !== captureRun) return;
+      }
+      countdown.hidden = true;
+      flash.hidden = false;
+      state.photos.push(grabFrame(camera.video, slotAspect(state.frame), state.facing === 'user'));
+      if (!await captureDelay(150) || run !== captureRun) return;
+      flash.hidden = true;
+    }
+    capturing = false;
+    show('select');
+  } catch (error) {
+    if (run === captureRun) showCameraError(error);
+  }
+}
 
 function releaseCamera() {
+  cancelCapture();
   cameraRequest += 1;
   cancelAnimationFrame(animationId);
   animationId = null;
@@ -90,6 +173,46 @@ export function show(screenName) {
   target.querySelector('h1')?.focus({ preventScroll: true });
   window.scrollTo(0, 0);
   if (screenName === 'capture') startCamera();
+  if (screenName === 'select') renderPhotos();
+}
+
+function updateSelection() {
+  photoPicker.querySelectorAll('[data-index]').forEach(button => {
+    const order = state.selected.indexOf(Number(button.dataset.index));
+    button.setAttribute('aria-pressed', String(order !== -1));
+    button.querySelector('.photo-order').textContent = order === -1 ? '' : String(order + 1);
+    button.setAttribute('aria-label', `Ảnh ${Number(button.dataset.index) + 1}${order === -1 ? '' : `, đã chọn thứ ${order + 1}`}`);
+  });
+  document.querySelector('#photo-choice').textContent = `Đã chọn ${state.selected.length}/${PICK} ảnh`;
+  continueButton.disabled = state.selected.length !== PICK;
+}
+
+function renderPhotos() {
+  photoPicker.replaceChildren();
+  document.querySelector('#select-intro').textContent = `Chạm để chọn ${PICK} ảnh. Thứ tự bạn chọn cũng là thứ tự trong khung.`;
+  state.photos.forEach((photo, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'photo-option';
+    button.dataset.action = 'select-photo';
+    button.dataset.index = String(index);
+    // Keep the full-resolution, unfiltered source canvases in state.
+    const thumbnail = document.createElement('canvas');
+    thumbnail.width = Math.min(PREVIEW_MAX_W, photo.width);
+    thumbnail.height = Math.max(1, Math.round(thumbnail.width * photo.height / photo.width));
+    thumbnail.getContext('2d').drawImage(photo, 0, 0, thumbnail.width, thumbnail.height);
+    thumbnail.setAttribute('aria-hidden', 'true');
+    const order = document.createElement('span');
+    order.className = 'photo-order';
+    order.setAttribute('aria-hidden', 'true');
+    button.append(thumbnail, order);
+    button.addEventListener('click', () => {
+      state.selected = toggleSelection(state.selected, index, PICK);
+      updateSelection();
+    });
+    photoPicker.append(button);
+  });
+  updateSelection();
 }
 
 function renderFrames() {
@@ -163,8 +286,23 @@ document.querySelector('[data-action="back"]').addEventListener('click', () => s
 document.querySelector('[data-action="retry"]').addEventListener('click', () => show('capture'));
 document.querySelector('[data-action="choose-frame"]').addEventListener('click', () => show('frames'));
 flipButton.addEventListener('click', () => {
+  if (capturing) return;
   state.facing = state.facing === 'user' ? 'environment' : 'user';
   startCamera();
+});
+shootButton.addEventListener('click', captureSequence);
+stopButton.addEventListener('click', cancelCapture);
+continueButton.addEventListener('click', () => {
+  if (state.selected.length === PICK) show('result');
+});
+document.querySelectorAll('[data-action="again"]').forEach(button => {
+  button.addEventListener('click', () => {
+    state.photos = [];
+    state.clips = [];
+    state.selected = [];
+    photoPicker.replaceChildren();
+    show('frames');
+  });
 });
 
 window.addEventListener('pagehide', releaseCamera);
@@ -174,3 +312,4 @@ window.addEventListener('pageshow', event => {
 
 renderFrames();
 renderFilters();
+resetCaptureControls();
